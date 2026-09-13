@@ -352,6 +352,27 @@ def _fit_candidate_bases(
             lambda c, cv=c_val: f"\\frac{{{c[0]}}}{{\\sqrt{{1 + {cv}x^2}}}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"\\frac{{{c[0]}}}{{\\sqrt{{1 + {cv}x^2}}}}",
         )
 
+    # 16. Inverse van Genuchten: a * (x^(-1/m) - 1)^(1/n) + b
+    if mx.min(x_grid).item() > 0.0 and mx.max(x_grid).item() <= 1.0:
+        x_safe = mx.clip(x_grid, 1e-4, 0.9999)
+        # n = 2.0, m = 0.5: sqrt(1/x^2 - 1)
+        A_ivg2 = mx.stack([mx.sqrt(mx.maximum((x_safe ** -2) - 1.0, 0.0)), ones], axis=1)
+        _fit(
+            A_ivg2, "inv_van_genuchten_n2",
+            lambda c: lambda x: c[0] * mx.sqrt(mx.maximum((mx.clip(x, 1e-4, 0.9999) ** -2) - 1.0, 0.0)) + c[1],
+            lambda c: f"{c[0]}*sqrt(1/x^2 - 1) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*sqrt(1/x^2 - 1)",
+            lambda c: f"{c[0]} \\sqrt{{\\frac{{1}}{{x^2}} - 1}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\sqrt{{\\frac{{1}}{{x^2}} - 1}}",
+        )
+        # n = 3.0, m = 2/3: (x^(-1.5) - 1)^(1/3)
+        diff_n3 = mx.maximum((x_safe ** -1.5) - 1.0, 0.0)
+        A_ivg3 = mx.stack([diff_n3 ** (1.0 / 3.0), ones], axis=1)
+        _fit(
+            A_ivg3, "inv_van_genuchten_n3",
+            lambda c: lambda x: c[0] * (mx.maximum((mx.clip(x, 1e-4, 0.9999) ** -1.5) - 1.0, 0.0) ** (1.0 / 3.0)) + c[1],
+            lambda c: f"{c[0]}*(1/x^1.5 - 1)^(1/3) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*(1/x^1.5 - 1)^(1/3)",
+            lambda c: f"{c[0]} \\left(\\frac{{1}}{{x^{{1.5}}}} - 1\\right)^{{1/3}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\left(\\frac{{1}}{{x^{{1.5}}}} - 1\\right)^{{1/3}}",
+        )
+
     if not candidates:
         return SymbolicEdge("zero", [], 1.0, lambda x: mx.zeros_like(x), "0", "0")
 
