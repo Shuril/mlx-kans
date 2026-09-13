@@ -313,6 +313,45 @@ def _fit_candidate_bases(
         lambda c: f"{c[0]} e^{{-x^2}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} e^{{-x^2}}",
     )
 
+    # 12. Square Root: a * sqrt(|x|) + b
+    A_sqrt = mx.stack([mx.sqrt(mx.abs(x_grid)), ones], axis=1)
+    _fit(
+        A_sqrt, "sqrt",
+        lambda c: lambda x: c[0] * mx.sqrt(mx.abs(x)) + c[1],
+        lambda c: f"{c[0]}*sqrt(|x|) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*sqrt(|x|)",
+        lambda c: f"{c[0]} \\sqrt{{|x|}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\sqrt{{|x|}}",
+    )
+
+    # 13. Sigmoid / Logistic: a / (1 + exp(-k*x)) + b
+    for k_val in [1.0, 2.0, 4.0, 6.0]:
+        A_sig = mx.stack([1.0 / (1.0 + mx.exp(-k_val * x_grid)), ones], axis=1)
+        _fit(
+            A_sig, f"sigmoid_k{int(k_val)}",
+            lambda c, k=k_val: lambda x: c[0] / (1.0 + mx.exp(-k * x)) + c[1],
+            lambda c, k=k_val: f"{c[0]}/(1+exp(-{k}*x)) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}/(1+exp(-{k}*x))",
+            lambda c, k=k_val: f"\\frac{{{c[0]}}}{{1 + e^{{-{k}x}}}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"\\frac{{{c[0]}}}{{1 + e^{{-{k}x}}}}",
+        )
+
+    # 14. Rational Cauchy / Lorentzian: a / (1 + c*x^2) + b
+    for c_val in [1.0, 2.0, 4.0, 8.0]:
+        A_rat = mx.stack([1.0 / (1.0 + c_val * (x_grid ** 2)), ones], axis=1)
+        _fit(
+            A_rat, f"rational_c{int(c_val)}",
+            lambda c, cv=c_val: lambda x: c[0] / (1.0 + cv * (x ** 2)) + c[1],
+            lambda c, cv=c_val: f"{c[0]}/(1+{cv}*x^2) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}/(1+{cv}*x^2)",
+            lambda c, cv=c_val: f"\\frac{{{c[0]}}}{{1 + {cv}x^2}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"\\frac{{{c[0]}}}{{1 + {cv}x^2}}",
+        )
+
+    # 15. van Genuchten / Inverse Square Root: a / sqrt(1 + c*x^2) + b
+    for c_val in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0]:
+        A_vg = mx.stack([1.0 / mx.sqrt(1.0 + c_val * (x_grid ** 2)), ones], axis=1)
+        _fit(
+            A_vg, f"van_genuchten_c{c_val}",
+            lambda c, cv=c_val: lambda x: c[0] / mx.sqrt(1.0 + cv * (x ** 2)) + c[1],
+            lambda c, cv=c_val: f"{c[0]}/sqrt(1+{cv}*x^2) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}/sqrt(1+{cv}*x^2)",
+            lambda c, cv=c_val: f"\\frac{{{c[0]}}}{{\\sqrt{{1 + {cv}x^2}}}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"\\frac{{{c[0]}}}{{\\sqrt{{1 + {cv}x^2}}}}",
+        )
+
     if not candidates:
         return SymbolicEdge("zero", [], 1.0, lambda x: mx.zeros_like(x), "0", "0")
 
