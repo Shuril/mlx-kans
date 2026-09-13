@@ -234,6 +234,17 @@ class KANLinear(nn.Module):
 
     forward = __call__
 
+    def to_quantized(
+        self,
+        group_size: int = 64,
+        bits: int = 8,
+        mode: str = "affine",
+        **kwargs,
+    ):
+        """Return a quantized approximation of this KAN layer."""
+        from efficient_kan.quantized import QuantizedKANLinear
+        return QuantizedKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+
     def update_grid(self, x: mx.array, margin: float = 0.01):
         """
         Adaptively update grid knots to fit the input data distribution while

@@ -24,6 +24,7 @@ from mlx_kans import FastKAN, ReLUKAN, LowRankKAN, WavKAN, ChebyKAN, FourierKAN,
    - [KAN / KANLinear (B-spline)](#kan--kanlinear-b-spline)
 2. [Metal Kernels (MSL)](#metal-kernels-msl)
 3. [Optimization & Training Utilities](#optimization--training-utilities)
+4. [Native INT8 & INT4 Quantization](#native-int8--int4-quantization)
 
 ---
 
@@ -231,3 +232,49 @@ In-place casts all floating-point parameters to `mx.float16` for maximum Apple S
 
 ### `to_bf16(model: nn.Module) -> nn.Module`
 In-place casts all floating-point parameters to `mx.bfloat16`.
+
+---
+
+## Native INT8 & INT4 Quantization
+
+Located in `mlx_kans.quantized`:
+
+### `to_int8(model: nn.Module, group_size: int = 64, mode: str = "affine", **kwargs) -> nn.Module`
+Quantizes all KAN layers in `model` to 8-bit integers (`uint32` packing 4 INT8 values per word) with group scales and biases. Matrix multiplications execute natively on Apple Silicon GPU without dequantization.
+- **Parameters**:
+  - `model` (*nn.Module*): Any model containing KAN layers.
+  - `group_size` (*int*, default `64`): Quantization block size (32, 64, or 128).
+  - `mode` (*str*, default `"affine"`): Quantization scheme (`"affine"` or `"symmetric"`).
+
+### `to_int4(model: nn.Module, group_size: int = 64, mode: str = "affine", **kwargs) -> nn.Module`
+Quantizes all KAN layers in `model` to 4-bit integers (`uint32` packing 8 INT4 values per word) with group scales and biases. Achieves up to 6.8x memory reduction for ultra-compact deployments.
+
+### `quantize(model: nn.Module, group_size: int = 64, bits: int = 8, mode: str = "affine", **kwargs) -> nn.Module`
+General quantization driver supporting any custom bit-width (4 or 8) and group size.
+
+### `get_model_size(model: nn.Module) -> dict`
+Returns memory statistics for the model:
+```python
+{
+    "total_params": 592896,
+    "total_bytes": 671744,
+    "mb": 0.640625,
+    "summary": "0.641 MB (671,744 bytes, 592,896 elements)"
+}
+```
+
+### `QuantizedWeight(weight: mx.array, group_size: int = 64, bits: int = 8, mode: str = "affine")`
+Low-level wrapper encapsulating packed `uint32` weight matrices, per-group scales, and biases. Automatically pads non-divisible dimensions. Forward pass invokes `mx.quantized_matmul(..., transpose=True)`.
+
+### Layer Classes:
+- `QuantizedKANLinear`
+- `QuantizedFastKANLinear`
+- `QuantizedReLUKANLinear`
+- `QuantizedChebyKANLinear`
+- `QuantizedWavKANLinear`
+- `QuantizedFourierKANLinear`
+- `QuantizedJacobiKANLinear`
+- `QuantizedLowRankKANLinear`
+- `QuantizedMultKANLinear`
+
+Each quantized layer provides a `.from_layer(layer, group_size, bits, mode)` factory method and conforms to standard MLX `to_quantized(...)` interface.

@@ -118,9 +118,53 @@ for epoch in range(100):
     mx.eval(model.parameters(), optimizer.state)
 ```
 
-### 3. Запуск тестов и бенчмарков
+### 3. Нативное квантование весов в INT8 и INT4 на Metal GPU
+```python
+import mlx_kans as kans
+import mlx.core as mx
+
+# 1. Создание модели KAN
+model = kans.FastKAN([128, 256, 128], num_grids=8)
+
+# Проверка размера в FP32
+print("FP32 размер:", kans.get_model_size(model)["summary"])
+# -> 2.262 MB (592,896 параметров)
+
+# 2. Квантование весов в INT8 нативно под Apple Silicon Metal
+kans.to_int8(model, group_size=64)
+
+# Проверка размера после квантования
+print("INT8 размер:", kans.get_model_size(model)["summary"])
+# -> 0.641 MB — сокращение памяти в 3.53x раза!
+
+# 3. Инференс аппаратно на Metal GPU через mx.quantized_matmul
+x = mx.random.normal((64, 128))
+y = model(x)
+```
+
+### Результаты бенчмарка квантования (топология `[128, 256, 128]`, Metal GPU):
+
+| Модель | FP32 Память | INT8 Память | Сжатие INT8 | INT8 MAE | INT4 Память | Сжатие INT4 |
+|---|---|---|---|---|---|---|
+| **`FastKAN` (RBF)** | 2.26 MB | 0.64 MB | **3.51x** | 0.729 | 0.36 MB | **6.23x** |
+| **`ReLUKAN` (Tent)** | 2.26 MB | 0.64 MB | **3.51x** | 0.552 | 0.36 MB | **6.23x** |
+| **`ChebyKAN`** | 1.75 MB | 0.49 MB | **3.56x** | 1.459 | 0.27 MB | **6.40x** |
+| **`WavKAN` (Wavelet)** | 2.27 MB | 0.66 MB | **3.46x** | 0.706 | 0.38 MB | **6.06x** |
+| **`FourierKAN`** | 3.50 MB | 0.98 MB | **3.56x** | 1.883 | 0.55 MB | **6.40x** |
+| **`JacobiKAN`** | 1.75 MB | 0.49 MB | **3.56x** | 1.283 | 0.27 MB | **6.40x** |
+| **`MultKAN` (2.0)** | 3.39 MB | 0.96 MB | **3.52x** | 0.561 | 0.54 MB | **6.28x** |
+| **`LowRankKAN`** | 0.47 MB | 0.16 MB | **2.93x** | 0.115 | 0.09 MB | **4.99x** |
+| **`B-Spline KAN`** | 2.77 MB | 0.72 MB | **3.83x** | 0.118 | 0.41 MB | **6.76x** |
+
+<p align="center">
+  <img src="assets/quantization_benchmark.png" alt="Бенчмарк квантования на Metal GPU" width="95%"/>
+</p>
+
+---
+
+### 4. Запуск тестов и бенчмарков
 ```bash
-# 1. Запуск 14 модульных тестов:
+# 1. Запуск 19 модульных тестов (включая квантование INT8/INT4):
 uv run --with mlx python -m unittest test_kan.py
 
 # 2. Изо-параметрический стресс-тест:
@@ -128,6 +172,9 @@ uv run --with mlx python iso_param_stress_test.py
 
 # 3. Сравнительный замер скорости (throughput):
 uv run --with mlx python benchmark.py
+
+# 4. Бенчмарк квантования INT8/INT4 на Metal GPU:
+uv run --with mlx,matplotlib python quantization_benchmark.py
 ```
 
 ---

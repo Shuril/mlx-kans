@@ -91,6 +91,17 @@ class MultKANLinear(nn.Module):
 
     forward = __call__
 
+    def to_quantized(
+        self,
+        group_size: int = 64,
+        bits: int = 8,
+        mode: str = "affine",
+        **kwargs,
+    ):
+        """Return a quantized approximation of this MultKAN layer."""
+        from .quantized import QuantizedMultKANLinear
+        return QuantizedMultKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+
     def regularization_loss(self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0) -> mx.array:
         return self.sub_layer.regularization_loss(regularize_activation, regularize_entropy)
 

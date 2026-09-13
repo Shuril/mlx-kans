@@ -101,6 +101,17 @@ class LowRankKANLinear(nn.Module):
 
     forward = __call__
 
+    def to_quantized(
+        self,
+        group_size: int = 64,
+        bits: int = 8,
+        mode: str = "affine",
+        **kwargs,
+    ):
+        """Return a quantized approximation of this LowRankKAN layer."""
+        from .quantized import QuantizedLowRankKANLinear
+        return QuantizedLowRankKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+
     def regularization_loss(self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0) -> mx.array:
         l1_u = mx.mean(mx.abs(self.spline_U))
         l1_v = mx.mean(mx.abs(self.spline_V))

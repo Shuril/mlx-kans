@@ -114,6 +114,59 @@ B-Spline KAN       | 81,920           |      2.392 ms  |          428,156       
 
 ---
 
+## Native Metal INT8 & INT4 Quantization
+
+`mlx-KANs` includes native hardware-accelerated **INT8** and **INT4** weight quantization on Apple Silicon GPU using Metal Performance Shaders (`mx.quantize` and `mx.quantized_matmul`).
+
+### How It Works:
+In Kolmogorov-Arnold Networks, >95% of weights and FLOPs reside in the linear projection matrices of basis functions ($W_{\text{spline}}$ and $W_{\text{base}}$).
+- **Zero-Dequantization Overhead**: `mx.quantized_matmul` performs matrix multiplication directly from packed `uint32` vectors (4 INT8 values per word) with group scales and biases on Metal GPU without expanding weights back into FP32 VRAM.
+- **Auto-Padding**: Non-standard layer dimensions (e.g. input size 2, 7, 13) are automatically zero-padded to `group_size` (32, 64, or 128) for seamless Metal execution.
+- **Standard MLX Compatibility**: Use either `kans.to_int8(model)` or official `mlx.nn.quantize(model, group_size=64, bits=8)`.
+
+```python
+import mlx_kans as kans
+import mlx.core as mx
+
+# 1. Instantiate any KAN model
+model = kans.FastKAN([128, 256, 128], num_grids=8)
+
+# Check memory size before quantization
+print("FP32 size:", kans.get_model_size(model)["summary"])
+# -> 2.262 MB (2,371,584 bytes, 592,896 elements)
+
+# 2. Quantize in-place to INT8 natively on Apple Silicon GPU
+kans.to_int8(model, group_size=64)
+
+# Check memory size after quantization
+print("INT8 size:", kans.get_model_size(model)["summary"])
+# -> 0.641 MB (671,744 bytes, 167,936 elements) -- 3.53x memory reduction!
+
+# 3. High-throughput inference directly on Metal GPU
+x = mx.random.normal((64, 128))
+y = model(x)
+```
+
+### Quantization Benchmark (Topology `[128, 256, 128]`, Metal GPU):
+
+| Model | FP32 Mem | INT8 Mem | INT8 Compression | INT8 MAE | INT4 Mem | INT4 Compression |
+|---|---|---|---|---|---|---|
+| **`FastKAN` (RBF)** | 2.26 MB | 0.64 MB | **3.51x** | 0.729 | 0.36 MB | **6.23x** |
+| **`ReLUKAN` (Tent)** | 2.26 MB | 0.64 MB | **3.51x** | 0.552 | 0.36 MB | **6.23x** |
+| **`ChebyKAN`** | 1.75 MB | 0.49 MB | **3.56x** | 1.459 | 0.27 MB | **6.40x** |
+| **`WavKAN` (Wavelet)** | 2.27 MB | 0.66 MB | **3.46x** | 0.706 | 0.38 MB | **6.06x** |
+| **`FourierKAN`** | 3.50 MB | 0.98 MB | **3.56x** | 1.883 | 0.55 MB | **6.40x** |
+| **`JacobiKAN`** | 1.75 MB | 0.49 MB | **3.56x** | 1.283 | 0.27 MB | **6.40x** |
+| **`MultKAN` (2.0)** | 3.39 MB | 0.96 MB | **3.52x** | 0.561 | 0.54 MB | **6.28x** |
+| **`LowRankKAN`** | 0.47 MB | 0.16 MB | **2.93x** | 0.115 | 0.09 MB | **4.99x** |
+| **`B-Spline KAN`** | 2.77 MB | 0.72 MB | **3.83x** | 0.118 | 0.41 MB | **6.76x** |
+
+<p align="center">
+  <img src="assets/quantization_benchmark.png" alt="Native Metal Quantization Benchmark" width="95%"/>
+</p>
+
+---
+
 ## Iso-Parameter Stress Test (Identical Parameter Budget $\pm 1\%$)
 
 To ensure strict scientific fairness, all models were calibrated to have the **exact same parameter budget ($\pm 1\%$)** across 4 diverse stress scenarios:

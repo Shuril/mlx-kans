@@ -32,6 +32,11 @@ from efficient_kan import (
     metal_cheby_basis,
     metal_relu_basis,
     is_metal_available,
+    QuantizedWeight,
+    quantize,
+    to_int8,
+    to_int4,
+    get_model_size,
 )
 
 
@@ -268,6 +273,78 @@ class TestEfficientKANSuite(unittest.TestCase):
         x_fp16 = mx.random.uniform(-1.0, 1.0, (8, 3)).astype(mx.float16)
         out = model(x_fp16)
         self.assertEqual(out.dtype, mx.float16)
+
+    # -----------------------------------------------------------------------
+    # 12. Native Metal INT8 & INT4 Quantization Tests
+    # -----------------------------------------------------------------------
+    def test_quantized_weight_auto_padding(self):
+        # Odd dimensions that don't divide by 32
+        w = mx.random.normal((17, 13))
+        qw = QuantizedWeight(w, group_size=32, bits=8)
+        x = mx.random.normal((5, 13))
+        y_ref = x @ w.T
+        y_quant = qw(x)
+        self.assertEqual(y_quant.shape, (5, 17))
+        # Accuracy retention: max difference between FP32 and INT8 matmul
+        self.assertLess(mx.max(mx.abs(y_quant - y_ref)).item(), 0.15)
+
+    def test_quantize_int8_all_architectures(self):
+        models = [
+            KAN([6, 12, 2], grid_size=5),
+            FastKAN([6, 12, 2], num_grids=6),
+            ReLUKAN([6, 12, 2], num_grids=6),
+            ChebyKAN([6, 12, 2], degree=4),
+            WavKAN([6, 12, 2], num_wavelets=6),
+            FourierKAN([6, 12, 2], num_frequencies=4),
+            JacobiKAN([6, 12, 2], degree=4),
+            MultKAN([6, 12, 2]),
+            LowRankKAN([6, 12, 2], rank=4),
+        ]
+        x = mx.random.normal((8, 6))
+
+        for m in models:
+            y_fp32 = m(x)
+            mx.eval(y_fp32)
+            to_int8(m, group_size=32)
+            y_int8 = m(x)
+            mx.eval(y_int8)
+
+            self.assertEqual(y_int8.shape, (8, 2))
+            mae = mx.mean(mx.abs(y_fp32 - y_int8)).item()
+            self.assertLess(mae, 0.1, f"High MAE on {type(m).__name__}: {mae}")
+
+    def test_quantize_int4(self):
+        m = FastKAN([8, 16, 2], num_grids=6)
+        x = mx.random.normal((4, 8))
+        y_fp32 = m(x)
+        mx.eval(y_fp32)
+
+        to_int4(m, group_size=32)
+        y_int4 = m(x)
+        mx.eval(y_int4)
+
+        self.assertEqual(y_int4.shape, (4, 2))
+        mae = mx.mean(mx.abs(y_fp32 - y_int4)).item()
+        self.assertLess(mae, 0.1)
+
+    def test_nn_quantize_compat(self):
+        # Official MLX nn.quantize compatibility
+        m = KAN([8, 16, 2], grid_size=5)
+        x = mx.random.normal((4, 8))
+        nn.quantize(m, group_size=32, bits=8)
+        y = m(x)
+        mx.eval(y)
+        self.assertEqual(y.shape, (4, 2))
+
+    def test_model_size_compression(self):
+        m = FastKAN([64, 128, 64], num_grids=8)
+        s_fp32 = get_model_size(m)
+        to_int8(m, group_size=64)
+        s_int8 = get_model_size(m)
+
+        # Expect ~3.4x memory reduction for INT8
+        compression = s_fp32["total_bytes"] / s_int8["total_bytes"]
+        self.assertGreater(compression, 3.0)
 
 
 if __name__ == "__main__":

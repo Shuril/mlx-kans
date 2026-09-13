@@ -99,6 +99,17 @@ class JacobiKANLinear(nn.Module):
 
     forward = __call__
 
+    def to_quantized(
+        self,
+        group_size: int = 64,
+        bits: int = 8,
+        mode: str = "affine",
+        **kwargs,
+    ):
+        """Return a quantized approximation of this JacobiKAN layer."""
+        from .quantized import QuantizedJacobiKANLinear
+        return QuantizedJacobiKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+
     def regularization_loss(self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0) -> mx.array:
         l1 = mx.mean(mx.abs(self.jacobi_weight), axis=-1)
         reg_l1 = mx.sum(l1)

@@ -19,6 +19,22 @@ from .metal_kernels import (
     metal_relu_basis,
     is_metal_available,
 )
+from .quantized import (
+    QuantizedWeight,
+    QuantizedKANLinear,
+    QuantizedFastKANLinear,
+    QuantizedReLUKANLinear,
+    QuantizedChebyKANLinear,
+    QuantizedWavKANLinear,
+    QuantizedFourierKANLinear,
+    QuantizedJacobiKANLinear,
+    QuantizedLowRankKANLinear,
+    QuantizedMultKANLinear,
+    quantize,
+    to_int8,
+    to_int4,
+    get_model_size,
+)
 
 __all__ = [
     # Core B-Spline KAN
@@ -59,4 +75,19 @@ __all__ = [
     "metal_cheby_basis",
     "metal_relu_basis",
     "is_metal_available",
+    # Native Metal INT8 & INT4 Quantization
+    "QuantizedWeight",
+    "QuantizedKANLinear",
+    "QuantizedFastKANLinear",
+    "QuantizedReLUKANLinear",
+    "QuantizedChebyKANLinear",
+    "QuantizedWavKANLinear",
+    "QuantizedFourierKANLinear",
+    "QuantizedJacobiKANLinear",
+    "QuantizedLowRankKANLinear",
+    "QuantizedMultKANLinear",
+    "quantize",
+    "to_int8",
+    "to_int4",
+    "get_model_size",
 ]
