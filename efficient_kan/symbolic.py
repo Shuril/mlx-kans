@@ -42,6 +42,21 @@ def _edge_to_c_code(name: str, coeffs: List[float], var: str) -> str:
             f"({c[0]}f * {var} * {var} * {var} * {var} + {c[1]}f * {var} * {var} * {var} "
             f"+ {c[2]}f * {var} * {var} + {c[3]}f * {var} + {c[4]}f)"
         )
+    elif name == "quintic":
+        return (
+            f"({c[0]}f * {var} * {var} * {var} * {var} * {var} + {c[1]}f * {var} * {var} * {var} * {var} "
+            f"+ {c[2]}f * {var} * {var} * {var} + {c[3]}f * {var} * {var} + {c[4]}f * {var} + {c[5]}f)"
+        )
+    elif name == "sextic":
+        return (
+            f"({c[0]}f * {var} * {var} * {var} * {var} * {var} * {var} + {c[1]}f * {var} * {var} * {var} * {var} * {var} "
+            f"+ {c[2]}f * {var} * {var} * {var} * {var} + {c[3]}f * {var} * {var} * {var} + {c[4]}f * {var} * {var} + {c[5]}f * {var} + {c[6]}f)"
+        )
+    elif name == "octic":
+        return (
+            f"((((((({c[0]}f * {var} + {c[1]}f) * {var} + {c[2]}f) * {var} + {c[3]}f) * {var} "
+            f"+ {c[4]}f) * {var} + {c[5]}f) * {var} + {c[6]}f) * {var} + {c[7]}f) * {var} + {c[8]}f"
+        )
     elif name.startswith("asinh_k"):
         k = float(name.split("_k")[1])
         return f"({c[0]}f * asinhf({k}f * {var}) + {c[1]}f)"
@@ -409,6 +424,36 @@ def _fit_candidate_bases(
         lambda c: lambda x: c[0] * (x ** 4) + c[1] * (x ** 3) + c[2] * (x ** 2) + c[3] * x + c[4],
         lambda c: f"{c[0]}*x^4 {c[1]:+.4f}*x^3 {c[2]:+.4f}*x^2 {c[3]:+.4f}*x {c[4]:+.4f}",
         lambda c: f"{c[0]} x^4 {c[1]:+.4f} x^3 {c[2]:+.4f} x^2 {c[3]:+.4f} x {c[4]:+.4f}",
+    )
+
+    # 4b2. Quintic: degree 5
+    A_quin = mx.stack([x_grid ** 5, x_grid ** 4, x_grid ** 3, x_grid ** 2, x_grid, ones], axis=1)
+    _fit(
+        A_quin, "quintic",
+        lambda c: lambda x: c[0] * (x ** 5) + c[1] * (x ** 4) + c[2] * (x ** 3) + c[3] * (x ** 2) + c[4] * x + c[5],
+        lambda c: f"{c[0]}*x^5 {c[1]:+.4f}*x^4 {c[2]:+.4f}*x^3 {c[3]:+.4f}*x^2 {c[4]:+.4f}*x {c[5]:+.4f}",
+        lambda c: f"{c[0]} x^5 {c[1]:+.4f} x^4 {c[2]:+.4f} x^3 {c[3]:+.4f} x^2 {c[4]:+.4f} x {c[5]:+.4f}",
+    )
+
+    # 4b3. Sextic: degree 6
+    A_sex = mx.stack([x_grid ** 6, x_grid ** 5, x_grid ** 4, x_grid ** 3, x_grid ** 2, x_grid, ones], axis=1)
+    _fit(
+        A_sex, "sextic",
+        lambda c: lambda x: c[0] * (x ** 6) + c[1] * (x ** 5) + c[2] * (x ** 4) + c[3] * (x ** 3) + c[4] * (x ** 2) + c[5] * x + c[6],
+        lambda c: f"{c[0]}*x^6 {c[1]:+.4f}*x^5 {c[2]:+.4f}*x^4 {c[3]:+.4f}*x^3 {c[4]:+.4f}*x^2 {c[5]:+.4f}*x {c[6]:+.4f}",
+        lambda c: f"{c[0]} x^6 {c[1]:+.4f} x^5 {c[2]:+.4f} x^4 {c[3]:+.4f} x^3 {c[4]:+.4f} x^2 {c[5]:+.4f} x {c[6]:+.4f}",
+    )
+
+    # 4b4. Octic: degree 8
+    A_oct = mx.stack([x_grid ** 8, x_grid ** 7, x_grid ** 6, x_grid ** 5, x_grid ** 4, x_grid ** 3, x_grid ** 2, x_grid, ones], axis=1)
+    _fit(
+        A_oct, "octic",
+        lambda c: lambda x: (
+            c[0] * (x ** 8) + c[1] * (x ** 7) + c[2] * (x ** 6) + c[3] * (x ** 5)
+            + c[4] * (x ** 4) + c[5] * (x ** 3) + c[6] * (x ** 2) + c[7] * x + c[8]
+        ),
+        lambda c: f"{c[0]}*x^8 {c[1]:+.4f}*x^7 {c[2]:+.4f}*x^6 {c[3]:+.4f}*x^5 {c[4]:+.4f}*x^4 {c[5]:+.4f}*x^3 {c[6]:+.4f}*x^2 {c[7]:+.4f}*x {c[8]:+.4f}",
+        lambda c: f"{c[0]} x^8 {c[1]:+.4f} x^7 {c[2]:+.4f} x^6 {c[3]:+.4f} x^5 {c[4]:+.4f} x^4 {c[5]:+.4f} x^3 {c[6]:+.4f} x^2 {c[7]:+.4f} x {c[8]:+.4f}",
     )
 
     # 4c. Asinh: a * asinh(k*x) + b (vital for Kepler and relativistic mechanics)
