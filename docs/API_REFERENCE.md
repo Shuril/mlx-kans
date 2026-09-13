@@ -228,10 +228,14 @@ Returns a dictionary:
 ```
 
 ### `to_fp16(model: nn.Module) -> nn.Module`
-In-place casts all floating-point parameters to `mx.float16` for maximum Apple Silicon GPU throughput.
+In-place casts all floating-point parameters to `mx.float16`.
+- **Hardware Acceleration**: Supported with 2x execution rate across **all** Apple Silicon generations (M1, M2, M3, M4, M5+).
+- **Recommendation**: Best for raw training and inference speed on M1/M2. When training with Adam, set `eps=1e-4` to avoid division-by-zero underflow.
 
 ### `to_bf16(model: nn.Module) -> nn.Module`
 In-place casts all floating-point parameters to `mx.bfloat16`.
+- **Hardware Acceleration**: Native hardware execution units require **Apple Silicon M3 or newer** (Apple GPU Family 8+).
+- **On M1 / M2**: Executed via software emulation / upcasting. Provides the exact same 8-bit dynamic exponent range as FP32 (preventing underflow and NaN) and 50% memory reduction, but runs at FP32 compute speed.
 
 ---
 

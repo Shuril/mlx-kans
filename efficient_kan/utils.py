@@ -81,7 +81,14 @@ def to_fp16(model: nn.Module) -> nn.Module:
 
 
 def to_bf16(model: nn.Module) -> nn.Module:
-    """Cast all floating point parameters in model to bfloat16 for Metal acceleration."""
+    """
+    Cast all floating point parameters in model to bfloat16.
+
+    Hardware execution:
+      - Native hardware execution units require Apple Silicon M3 or newer (Apple GPU Family 8+).
+      - On M1 / M2, executed via software emulation/upcasting (halves memory and avoids underflow/NaN,
+        but compute runs at FP32 throughput).
+    """
     def _cast_tree(d: Any) -> Any:
         if isinstance(d, dict):
             return {k: _cast_tree(v) for k, v in d.items()}
