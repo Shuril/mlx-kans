@@ -137,10 +137,16 @@ kans.to_int8(model, group_size=64)
 print("INT8 размер:", kans.get_model_size(model)["summary"])
 # -> 0.641 MB — сокращение памяти в 3.53x раза!
 
-# 3. Инференс аппаратно на Metal GPU через mx.quantized_matmul
-x = mx.random.normal((64, 128))
-y = model(x)
+# 4. Поддержка FP8 (аппаратное ускорение на чипах M4/M5+):
+# На чипах с тензорными блоками FP8 используйте to_fp8:
+# kans.to_fp8(model)
+# На более ранних чипах (M1/M2/M3) to_fp8 выбрасывает HardwareNotSupportedError,
+# чтобы избежать скрытого замедления, если явно не указан allow_emulation=True.
 ```
+
+### Матрица аппаратной поддержки (INT8 vs INT4 vs FP8):
+- **INT8 / INT4 (`affine`)**: Аппаратно поддерживается **на всех поколениях Apple Silicon (M1, M2, M3, M4, M5+)**.
+- **FP8 (`mxfp8` / E4M3)**: Аппаратные тензорные блоки FP8 требуют **Apple Silicon M4 / M5 или новее** (Apple GPU Family 9+). Попытка вызова `to_fp8` на M1/M2/M3 автоматически вызывает ошибку `HardwareNotSupportedError`, если не передан `allow_emulation=True`.
 
 ### Результаты бенчмарка квантования (топология `[128, 256, 128]`, Metal GPU):
 

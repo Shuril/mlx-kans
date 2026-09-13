@@ -142,10 +142,16 @@ kans.to_int8(model, group_size=64)
 print("INT8 size:", kans.get_model_size(model)["summary"])
 # -> 0.641 MB (671,744 bytes, 167,936 elements) -- 3.53x memory reduction!
 
-# 3. High-throughput inference directly on Metal GPU
-x = mx.random.normal((64, 128))
-y = model(x)
+# 4. FP8 Support (M4/M5+ hardware acceleration):
+# On M4/M5+ chips with native FP8 tensor units, use to_fp8:
+# kans.to_fp8(model)
+# On earlier chips (M1/M2/M3), to_fp8 raises HardwareNotSupportedError
+# to prevent silent fallback, unless allow_emulation=True is passed.
 ```
+
+### Hardware Support Matrix (INT8 vs INT4 vs FP8):
+- **INT8 / INT4 (`affine`)**: Supported natively on hardware across **all Apple Silicon generations (M1, M2, M3, M4, M5+)**.
+- **FP8 (`mxfp8` / E4M3)**: Native hardware tensor acceleration requires **Apple Silicon M4 / M5 or newer** (Apple GPU Family 9+). Calling `to_fp8` on M1/M2/M3 automatically raises `HardwareNotSupportedError` unless `allow_emulation=True` is explicitly passed.
 
 ### Quantization Benchmark (Topology `[128, 256, 128]`, Metal GPU):
 

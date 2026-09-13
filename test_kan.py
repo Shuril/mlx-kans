@@ -36,7 +36,11 @@ from efficient_kan import (
     quantize,
     to_int8,
     to_int4,
+    to_fp8,
     get_model_size,
+    is_fp8_hardware_supported,
+    get_chip_name,
+    HardwareNotSupportedError,
 )
 
 
@@ -345,6 +349,33 @@ class TestEfficientKANSuite(unittest.TestCase):
         # Expect ~3.4x memory reduction for INT8
         compression = s_fp32["total_bytes"] / s_int8["total_bytes"]
         self.assertGreater(compression, 3.0)
+
+    # -----------------------------------------------------------------------
+    # 13. FP8 Hardware Support & Error Handling Tests
+    # -----------------------------------------------------------------------
+    def test_fp8_hardware_detection(self):
+        # Current device is Apple M1, so hardware FP8 should return False
+        self.assertFalse(is_fp8_hardware_supported())
+        chip = get_chip_name()
+        self.assertIn("M1", chip)
+
+    def test_fp8_unsupported_hardware_raises_error(self):
+        m = FastKAN([8, 16, 2], num_grids=6)
+        with self.assertRaises(HardwareNotSupportedError) as ctx:
+            to_fp8(m)
+        err_msg = str(ctx.exception)
+        self.assertIn("Hardware FP8", err_msg)
+        self.assertIn("not supported in hardware", err_msg)
+        self.assertIn("M1", err_msg)
+
+    def test_fp8_allow_emulation(self):
+        m = FastKAN([8, 16, 2], num_grids=6)
+        # With allow_emulation=True, it should quantize to mxfp8 and execute
+        to_fp8(m, allow_emulation=True)
+        x = mx.random.normal((4, 8))
+        y = m(x)
+        mx.eval(y)
+        self.assertEqual(y.shape, (4, 2))
 
 
 if __name__ == "__main__":

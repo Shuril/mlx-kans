@@ -56,7 +56,11 @@ from efficient_kan import (
     quantize,
     to_int8,
     to_int4,
+    to_fp8,
     get_model_size,
+    is_fp8_hardware_supported,
+    get_chip_name,
+    HardwareNotSupportedError,
 )
 
 __all__ = [
@@ -100,5 +104,9 @@ __all__ = [
     "quantize",
     "to_int8",
     "to_int4",
+    "to_fp8",
     "get_model_size",
+    "is_fp8_hardware_supported",
+    "get_chip_name",
+    "HardwareNotSupportedError",
 ]

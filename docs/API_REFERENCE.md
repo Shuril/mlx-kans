@@ -249,8 +249,22 @@ Quantizes all KAN layers in `model` to 8-bit integers (`uint32` packing 4 INT8 v
 ### `to_int4(model: nn.Module, group_size: int = 64, mode: str = "affine", **kwargs) -> nn.Module`
 Quantizes all KAN layers in `model` to 4-bit integers (`uint32` packing 8 INT4 values per word) with group scales and biases. Achieves up to 6.8x memory reduction for ultra-compact deployments.
 
-### `quantize(model: nn.Module, group_size: int = 64, bits: int = 8, mode: str = "affine", **kwargs) -> nn.Module`
-General quantization driver supporting any custom bit-width (4 or 8) and group size.
+### `to_fp8(model: nn.Module, group_size: int = 32, allow_emulation: bool = False, **kwargs) -> nn.Module`
+Quantizes all KAN layers in `model` to 8-bit floating point (`mxfp8` / E4M3 with E8M0 scale per group of 32).
+- **Hardware Requirement**: Native hardware FP8 execution units require Apple Silicon M4 / M5 or newer (Apple GPU Family 9+).
+- **Error Behavior**: On earlier chips (M1, M2, M3), calling `to_fp8` raises `HardwareNotSupportedError` unless `allow_emulation=True` is explicitly specified.
+
+### `is_fp8_hardware_supported() -> bool`
+Returns `True` if the current Apple Silicon GPU possesses physical hardware tensor/ALU execution units for FP8 (M4 / M5+). Returns `False` on M1, M2, M3.
+
+### `get_chip_name() -> str`
+Returns the detected marketing name of the active Apple Silicon chip (e.g. `'Apple M1'`, `'Apple M4 Pro'`).
+
+### `HardwareNotSupportedError(RuntimeError)`
+Exception raised when an operation requires hardware features not physically present in the GPU silicon of the host machine.
+
+### `quantize(model: nn.Module, group_size: int = 64, bits: int = 8, mode: str = "affine", allow_emulation: bool = False, **kwargs) -> nn.Module`
+General quantization driver supporting any custom bit-width (4 or 8), group size, and mode (`"affine"` or `"mxfp8"` / `"fp8"`).
 
 ### `get_model_size(model: nn.Module) -> dict`
 Returns memory statistics for the model:

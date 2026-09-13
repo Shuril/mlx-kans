@@ -243,7 +243,7 @@ class KANLinear(nn.Module):
     ):
         """Return a quantized approximation of this KAN layer."""
         from efficient_kan.quantized import QuantizedKANLinear
-        return QuantizedKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+        return QuantizedKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode, **kwargs)
 
     def update_grid(self, x: mx.array, margin: float = 0.01):
         """

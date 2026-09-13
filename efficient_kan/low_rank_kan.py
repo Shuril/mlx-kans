@@ -110,7 +110,7 @@ class LowRankKANLinear(nn.Module):
     ):
         """Return a quantized approximation of this LowRankKAN layer."""
         from .quantized import QuantizedLowRankKANLinear
-        return QuantizedLowRankKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode)
+        return QuantizedLowRankKANLinear.from_layer(self, group_size=group_size, bits=bits, mode=mode, **kwargs)
 
     def regularization_loss(self, regularize_activation: float = 1.0, regularize_entropy: float = 1.0) -> mx.array:
         l1_u = mx.mean(mx.abs(self.spline_U))
