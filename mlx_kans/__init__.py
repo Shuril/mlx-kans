@@ -1,0 +1,75 @@
+"""
+mlx-KANs: Unified High-Performance Kolmogorov-Arnold Networks Suite for Apple Silicon MLX.
+Hardware-accelerated with Metal (MSL), JIT compilation, mixed precision, and unified memory.
+"""
+
+from efficient_kan import (
+    # Core B-Spline KAN
+    KAN,
+    KANLinear,
+    compute_b_splines,
+    # FastKAN (Gaussian RBF)
+    FastKAN,
+    FastKANLinear,
+    # ReLUKAN (Piecewise Linear Tent)
+    ReLUKAN,
+    ReLUKANLinear,
+    # ChebyKAN (Chebyshev Polynomials)
+    ChebyKAN,
+    ChebyKANLinear,
+    # Wav-KAN (Continuous Wavelets)
+    WavKAN,
+    WavKANLinear,
+    # FourierKAN (Harmonic Series)
+    FourierKAN,
+    FourierKANLinear,
+    # JacobiKAN (Orthogonal Jacobi Polynomials)
+    JacobiKAN,
+    JacobiKANLinear,
+    # MultKAN (KAN 2.0 with Multiplication Nodes)
+    MultKAN,
+    MultKANLinear,
+    # LowRankKAN (Bottleneck / LoRA Factorization)
+    LowRankKAN,
+    LowRankKANLinear,
+    # Utilities & Optimizations
+    build_train_step,
+    count_parameters,
+    to_fp16,
+    to_bf16,
+    # Custom Metal Kernels (MSL)
+    metal_rbf_basis,
+    metal_cheby_basis,
+    metal_relu_basis,
+    is_metal_available,
+)
+
+__all__ = [
+    "KAN",
+    "KANLinear",
+    "compute_b_splines",
+    "FastKAN",
+    "FastKANLinear",
+    "ReLUKAN",
+    "ReLUKANLinear",
+    "ChebyKAN",
+    "ChebyKANLinear",
+    "WavKAN",
+    "WavKANLinear",
+    "FourierKAN",
+    "FourierKANLinear",
+    "JacobiKAN",
+    "JacobiKANLinear",
+    "MultKAN",
+    "MultKANLinear",
+    "LowRankKAN",
+    "LowRankKANLinear",
+    "build_train_step",
+    "count_parameters",
+    "to_fp16",
+    "to_bf16",
+    "metal_rbf_basis",
+    "metal_cheby_basis",
+    "metal_relu_basis",
+    "is_metal_available",
+]

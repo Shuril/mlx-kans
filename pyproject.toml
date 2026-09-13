@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlx-kans"
+version = "0.1.0"
+description = "mlx-KANs: High-Performance Kolmogorov-Arnold Networks (KAN) Suite for Apple Silicon MLX (Metal GPU / MPS)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "Alex", email = "cara26@bk.ru" }
+]
+keywords = [
+    "mlx-kans",
+    "kan",
+    "kolmogorov-arnold-networks",
+    "fastkan",
+    "relukan",
+    "chebykan",
+    "wavkan",
+    "multkan",
+    "lowrankkan",
+    "mlx",
+    "apple-silicon",
+    "metal",
+    "deep-learning"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = [
+    "mlx>=0.10.0"
+]
+
+[tool.setuptools]
+packages = ["mlx_kans", "efficient_kan"]
+py-modules = ["kan"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
