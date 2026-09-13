@@ -12,10 +12,16 @@ Once converted to symbolic form:
 
 from __future__ import annotations
 import math
+import re
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union, Any
 
 import mlx.core as mx
 import mlx.nn as nn
+
+
+def _sub_var(text: str, new_var: str) -> str:
+    """Safely substitute standalone variable 'x' without corrupting words like 'exp' or 'asinh'."""
+    return re.sub(r'(?<![a-zA-Z0-9_])x(?![a-zA-Z0-9_])', new_var, text)
 
 
 class SymbolicEdge:
@@ -108,7 +114,7 @@ class SymbolicKAN:
                 for i in range(layer.in_features):
                     edge = layer.edges[j][i]
                     if edge.name != "zero":
-                        terms.append(edge.formula_str.replace("x", f"x{i}"))
+                        terms.append(_sub_var(edge.formula_str, f"x{i}"))
                 if layer.bias[j] != 0.0:
                     terms.append(f"{layer.bias[j]:+.4f}")
                 expr = " + ".join(terms) if terms else "0.0"
@@ -123,7 +129,7 @@ class SymbolicKAN:
                     for i in range(layer.in_features):
                         edge = layer.edges[j][i]
                         if edge.name != "zero":
-                            terms.append(edge.formula_str.replace("x", f"{in_var}{i}"))
+                            terms.append(_sub_var(edge.formula_str, f"{in_var}{i}"))
                     if layer.bias[j] != 0.0:
                         terms.append(f"{layer.bias[j]:+.4f}")
                     expr = " + ".join(terms) if terms else "0.0"
@@ -141,7 +147,7 @@ class SymbolicKAN:
                 for i in range(layer.in_features):
                     edge = layer.edges[j][i]
                     if edge.name != "zero":
-                        terms.append(edge.latex_str.replace("x", f"x_{{{i}}}"))
+                        terms.append(_sub_var(edge.latex_str, f"x_{{{i}}}"))
                 if layer.bias[j] != 0.0:
                     terms.append(f"{layer.bias[j]:+.4f}")
                 expr = " + ".join(terms) if terms else "0"
@@ -156,7 +162,7 @@ class SymbolicKAN:
                     for i in range(layer.in_features):
                         edge = layer.edges[j][i]
                         if edge.name != "zero":
-                            terms.append(edge.latex_str.replace("x", f"{in_var}_{{{i}}}"))
+                            terms.append(_sub_var(edge.latex_str, f"{in_var}_{{{i}}}"))
                     if layer.bias[j] != 0.0:
                         terms.append(f"{layer.bias[j]:+.4f}")
                     expr = " + ".join(terms) if terms else "0"
@@ -249,6 +255,35 @@ def _fit_candidate_bases(
         lambda c: f"{c[0]}*x^3 {c[1]:+.4f}*x^2 {c[2]:+.4f}*x {c[3]:+.4f}",
         lambda c: f"{c[0]} x^3 {c[1]:+.4f} x^2 {c[2]:+.4f} x {c[3]:+.4f}",
     )
+
+    # 4b. Quartic: a * x^4 + b * x^3 + c * x^2 + d * x + e
+    A_quar = mx.stack([x_grid ** 4, x_grid ** 3, x_grid ** 2, x_grid, ones], axis=1)
+    _fit(
+        A_quar, "quartic",
+        lambda c: lambda x: c[0] * (x ** 4) + c[1] * (x ** 3) + c[2] * (x ** 2) + c[3] * x + c[4],
+        lambda c: f"{c[0]}*x^4 {c[1]:+.4f}*x^3 {c[2]:+.4f}*x^2 {c[3]:+.4f}*x {c[4]:+.4f}",
+        lambda c: f"{c[0]} x^4 {c[1]:+.4f} x^3 {c[2]:+.4f} x^2 {c[3]:+.4f} x {c[4]:+.4f}",
+    )
+
+    # 4c. Asinh: a * asinh(k*x) + b (vital for Kepler and relativistic mechanics)
+    for k_val in [0.5, 1.0, 2.0]:
+        A_asinh = mx.stack([mx.arcsinh(k_val * x_grid), ones], axis=1)
+        _fit(
+            A_asinh, f"asinh_k{k_val}",
+            lambda c, k=k_val: lambda x: c[0] * mx.arcsinh(k * x) + c[1],
+            lambda c, k=k_val: f"{c[0]}*asinh({k}*x) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*asinh({k}*x)",
+            lambda c, k=k_val: f"{c[0]} \\operatorname{{asinh}}({k}x) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\operatorname{{asinh}}({k}x)",
+        )
+
+    # 4d. Log1p: a * log(1 + |x|) + b
+    A_log = mx.stack([mx.log(1.0 + mx.abs(x_grid)), ones], axis=1)
+    _fit(
+        A_log, "log1p",
+        lambda c: lambda x: c[0] * mx.log(1.0 + mx.abs(x)) + c[1],
+        lambda c: f"{c[0]}*log(1+|x|) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*log(1+|x|)",
+        lambda c: f"{c[0]} \\ln(1+|x|) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\ln(1+|x|)",
+    )
+
 
     # 5. Sin(pi * x): a * sin(pi * x) + b
     A_sin = mx.stack([mx.sin(mx.pi * x_grid), ones], axis=1)
@@ -371,6 +406,16 @@ def _fit_candidate_bases(
             lambda c: lambda x: c[0] * (mx.maximum((mx.clip(x, 1e-4, 0.9999) ** -1.5) - 1.0, 0.0) ** (1.0 / 3.0)) + c[1],
             lambda c: f"{c[0]}*(1/x^1.5 - 1)^(1/3) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}*(1/x^1.5 - 1)^(1/3)",
             lambda c: f"{c[0]} \\left(\\frac{{1}}{{x^{{1.5}}}} - 1\\right)^{{1/3}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]} \\left(\\frac{{1}}{{x^{{1.5}}}} - 1\\right)^{{1/3}}",
+        )
+
+    # 17. Inverse Rational / Monopole: a / (|x| + c) + b (vital for gas equations of state)
+    for c_val in [0.1, 0.25, 0.5, 1.0, 2.0]:
+        A_invr = mx.stack([1.0 / (mx.abs(x_grid) + c_val), ones], axis=1)
+        _fit(
+            A_invr, f"inv_rational_c{c_val}",
+            lambda c, cv=c_val: lambda x: c[0] / (mx.abs(x) + cv) + c[1],
+            lambda c, cv=c_val: f"{c[0]}/(|x|+{cv}) {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"{c[0]}/(|x|+{cv})",
+            lambda c, cv=c_val: f"\\frac{{{c[0]}}}{{|x| + {cv}}} {c[1]:+.4f}" if abs(c[1]) >= 1e-4 else f"\\frac{{{c[0]}}}{{|x| + {cv}}}",
         )
 
     if not candidates:
