@@ -26,6 +26,8 @@ from efficient_kan import (
     MultKANLinear,
     LowRankKAN,
     LowRankKANLinear,
+    RationalKAN,
+    RationalKANLinear,
     build_train_step,
     count_parameters,
     to_fp16,
@@ -412,6 +414,87 @@ class TestEfficientKANSuite(unittest.TestCase):
         y_sym = sym(x)
         mx.eval(y_sym)
         self.assertEqual(y_sym.shape, (8, 1))
+
+    # -----------------------------------------------------------------------
+    # 7. RationalKAN & C Export Tests
+    # -----------------------------------------------------------------------
+    def test_rational_kan(self):
+        # Multi-layer RationalKAN
+        m = RationalKAN([4, 8, 2], p_degree=3, q_degree=2)
+        x2d = mx.random.uniform(-0.9, 0.9, (16, 4))
+        out2d = m(x2d)
+        mx.eval(out2d)
+        self.assertEqual(out2d.shape, (16, 2))
+
+        # 3D input shape support
+        x3d = mx.random.uniform(-0.9, 0.9, (4, 6, 4))
+        out3d = m(x3d)
+        mx.eval(out3d)
+        self.assertEqual(out3d.shape, (4, 6, 2))
+
+        # Gradient update check
+        opt = optim.Adam(0.01)
+        step = build_train_step(m, opt, lambda model, a, b: mx.mean((model(a) - b) ** 2))
+        target = mx.ones((16, 2))
+        loss = step(x2d, target)
+        mx.eval(loss)
+        self.assertGreater(loss.item(), 0.0)
+
+        # Symbolic extraction on RationalKAN
+        sym = to_symbolic(m, sample_points=100)
+        self.assertIsInstance(sym, SymbolicKAN)
+        self.assertIn("y0 =", sym.formula())
+
+    def test_symbolic_c_export_and_compilation(self):
+        import subprocess
+        m = FastKAN([2, 1], num_grids=6)
+        sym = to_symbolic(m, sample_points=100)
+
+        # 1. Test C code and Header generation string
+        c_code = sym.to_c_code(func_name="kan_model_eval")
+        self.assertIn("void kan_model_eval", c_code)
+        self.assertIn("y[0] =", c_code)
+
+        c_header = sym.to_c_header(guard="MY_KAN_H", func_name="kan_model_eval")
+        self.assertIn("#ifndef MY_KAN_H", c_header)
+        self.assertIn("#include <math.h>", c_header)
+
+        # 2. Test writing to file and compiling with system C compiler
+        with tempfile.TemporaryDirectory() as tmpdir:
+            header_path = os.path.join(tmpdir, "kan_model.h")
+            sym.export_c(header_path, guard="TEST_KAN_H", func_name="kan_predict")
+            self.assertTrue(os.path.exists(header_path))
+
+            # Create a test runner C program
+            main_c_path = os.path.join(tmpdir, "main.c")
+            main_c_code = """
+            #include <stdio.h>
+            #include "kan_model.h"
+
+            int main() {
+                float x[2] = {0.5f, -0.25f};
+                float y[1] = {0.0f};
+                kan_predict(x, y);
+                printf("OUT: %f\\n", y[0]);
+                return 0;
+            }
+            """
+            with open(main_c_path, "w") as f:
+                f.write(main_c_code)
+
+            # Compile with clang/gcc
+            bin_path = os.path.join(tmpdir, "test_kan_bin")
+            cc = os.environ.get("CC", "clang")
+            res = subprocess.run([cc, "-O2", main_c_path, "-o", bin_path, "-lm"], capture_output=True, text=True)
+            if res.returncode == 0:
+                run_res = subprocess.run([bin_path], capture_output=True, text=True)
+                self.assertEqual(run_res.returncode, 0)
+                self.assertIn("OUT:", run_res.stdout)
+                c_out = float(run_res.stdout.strip().split("OUT:")[1])
+
+                # Compare with Python SymbolicKAN output on same input
+                py_out = sym(mx.array([[0.5, -0.25]])).item()
+                self.assertAlmostEqual(c_out, py_out, places=4)
 
 
 if __name__ == "__main__":

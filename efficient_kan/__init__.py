@@ -12,6 +12,7 @@ from .fourier_kan import FourierKAN, FourierKANLinear
 from .jacobi_kan import JacobiKAN, JacobiKANLinear
 from .mult_kan import MultKAN, MultKANLinear
 from .low_rank_kan import LowRankKAN, LowRankKANLinear
+from .rational_kan import RationalKAN, RationalKANLinear
 from .utils import build_train_step, count_parameters, to_fp16, to_bf16
 from .metal_kernels import (
     metal_rbf_basis,
@@ -68,6 +69,9 @@ __all__ = [
     # LowRankKAN (LoRA / Bottleneck)
     "LowRankKAN",
     "LowRankKANLinear",
+    # RationalKAN (Padé-Chebyshev rational functions)
+    "RationalKAN",
+    "RationalKANLinear",
     # Utilities & Optimizations
     "build_train_step",
     "count_parameters",

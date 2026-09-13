@@ -32,6 +32,9 @@ from efficient_kan import (
     # LowRankKAN (Bottleneck / LoRA Factorization)
     LowRankKAN,
     LowRankKANLinear,
+    # RationalKAN (Padé-Chebyshev Rational Functions)
+    RationalKAN,
+    RationalKANLinear,
     # Utilities & Optimizations
     build_train_step,
     count_parameters,
@@ -89,6 +92,8 @@ __all__ = [
     "MultKANLinear",
     "LowRankKAN",
     "LowRankKANLinear",
+    "RationalKAN",
+    "RationalKANLinear",
     "build_train_step",
     "count_parameters",
     "to_fp16",

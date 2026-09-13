@@ -24,6 +24,61 @@ def _sub_var(text: str, new_var: str) -> str:
     return re.sub(r'(?<![a-zA-Z0-9_])x(?![a-zA-Z0-9_])', new_var, text)
 
 
+def _edge_to_c_code(name: str, coeffs: List[float], var: str) -> str:
+    """Generate valid ANSI C99 expression evaluating this edge."""
+    if name == "zero" or not coeffs:
+        return "0.0f"
+    c = coeffs
+    if name == "linear":
+        return f"({c[0]}f * {var} + {c[1]}f)"
+    elif name == "pure_quadratic":
+        return f"({c[0]}f * {var} * {var} + {c[1]}f)"
+    elif name == "quadratic":
+        return f"({c[0]}f * {var} * {var} + {c[1]}f * {var} + {c[2]}f)"
+    elif name == "cubic":
+        return f"({c[0]}f * {var} * {var} * {var} + {c[1]}f * {var} * {var} + {c[2]}f * {var} + {c[3]}f)"
+    elif name == "quartic":
+        return (
+            f"({c[0]}f * {var} * {var} * {var} * {var} + {c[1]}f * {var} * {var} * {var} "
+            f"+ {c[2]}f * {var} * {var} + {c[3]}f * {var} + {c[4]}f)"
+        )
+    elif name.startswith("asinh_k"):
+        k = float(name.split("_k")[1])
+        return f"({c[0]}f * asinhf({k}f * {var}) + {c[1]}f)"
+    elif name == "log1p":
+        return f"({c[0]}f * log1pf(fabsf({var})) + {c[1]}f)"
+    elif name == "sin":
+        return f"({c[0]}f * sinf(3.14159265f * {var}) + {c[1]}f)"
+    elif name == "cos":
+        return f"({c[0]}f * cosf(3.14159265f * {var}) + {c[1]}f)"
+    elif name == "sin2":
+        return f"({c[0]}f * sinf(6.28318531f * {var}) + {c[1]}f)"
+    elif name == "exp":
+        return f"({c[0]}f * expf({var}) + {c[1]}f)"
+    elif name == "tanh":
+        return f"({c[0]}f * tanhf({var}) + {c[1]}f)"
+    elif name == "abs":
+        return f"({c[0]}f * fabsf({var}) + {c[1]}f)"
+    elif name == "gaussian":
+        return f"({c[0]}f * expf(-{var} * {var}) + {c[1]}f)"
+    elif name == "sqrt":
+        return f"({c[0]}f * sqrtf(fabsf({var})) + {c[1]}f)"
+    elif name.startswith("sigmoid_k"):
+        k = float(name.split("_k")[1])
+        return f"({c[0]}f / (1.0f + expf(-{k}f * {var})) + {c[1]}f)"
+    elif name.startswith("rational_c"):
+        cv = float(name.split("_c")[1])
+        return f"({c[0]}f / (1.0f + {cv}f * {var} * {var}) + {c[1]}f)"
+    elif name.startswith("van_genuchten_c"):
+        cv = float(name.split("_c")[1])
+        return f"({c[0]}f / sqrtf(1.0f + {cv}f * {var} * {var}) + {c[1]}f)"
+    elif name.startswith("inv_rational_c"):
+        cv = float(name.split("_c")[1])
+        return f"({c[0]}f / (fabsf({var}) + {cv}f) + {c[1]}f)"
+    else:
+        return f"({c[0]}f * {var})" if len(c) > 0 else "0.0f"
+
+
 class SymbolicEdge:
     """Represents a single 1D fitted mathematical edge f(x) in a Symbolic KAN."""
 
@@ -45,6 +100,10 @@ class SymbolicEdge:
 
     def __call__(self, x: mx.array) -> mx.array:
         return self.eval_fn(x)
+
+    def c_code(self, var_name: str = "x") -> str:
+        """Return C expression evaluating this edge."""
+        return _edge_to_c_code(self.name, self.coeffs, var_name)
 
     def __repr__(self) -> str:
         return f"<SymbolicEdge {self.formula_str} (R2={self.r2:.4f})>"
@@ -174,6 +233,93 @@ class SymbolicKAN:
     def r2_scores(self) -> List[List[List[float]]]:
         """Return 3D list [layer][out_neuron][in_neuron] of R2 fit scores."""
         return [[[edge.r2 for edge in row] for row in layer.edges] for layer in self.layers]
+
+    def to_c_code(self, func_name: str = "kan_predict", inline: bool = True) -> str:
+        """
+        Generate an ANSI C99 / C++ function implementation evaluating this KAN model.
+        Signature: void func_name(const float* x, float* y);
+        """
+        qualifier = "static inline " if inline else ""
+        lines = [f"{qualifier}void {func_name}(const float* x, float* y) {{"]
+
+        if len(self.layers) == 1:
+            layer = self.layers[0]
+            for j in range(layer.out_features):
+                terms = []
+                for i in range(layer.in_features):
+                    edge = layer.edges[j][i]
+                    if edge.name != "zero":
+                        terms.append(edge.c_code(f"x[{i}]"))
+                if layer.bias[j] != 0.0:
+                    terms.append(f"{layer.bias[j]:+.6f}f")
+                expr = " + ".join(terms) if terms else "0.0f"
+                lines.append(f"    y[{j}] = {expr};")
+        else:
+            for l_idx, layer in enumerate(self.layers):
+                is_first = (l_idx == 0)
+                is_last = (l_idx == len(self.layers) - 1)
+                lines.append(f"    /* Layer {l_idx} */")
+                if not is_last:
+                    lines.append(f"    float h_{l_idx}[{layer.out_features}];")
+
+                for j in range(layer.out_features):
+                    out_target = f"y[{j}]" if is_last else f"h_{l_idx}[{j}]"
+                    terms = []
+                    for i in range(layer.in_features):
+                        in_src = f"x[{i}]" if is_first else f"h_{l_idx-1}[{i}]"
+                        edge = layer.edges[j][i]
+                        if edge.name != "zero":
+                            terms.append(edge.c_code(in_src))
+                    if layer.bias[j] != 0.0:
+                        terms.append(f"{layer.bias[j]:+.6f}f")
+                    expr = " + ".join(terms) if terms else "0.0f"
+                    lines.append(f"    {out_target} = {expr};")
+        lines.append("}")
+        return "\n".join(lines)
+
+    def to_c_header(self, guard: str = "KAN_MODEL_H", func_name: str = "kan_predict") -> str:
+        """
+        Generate a complete, self-contained, header-only C/C++ file with 0 dependencies.
+        """
+        in_dim = self.layers[0].in_features
+        out_dim = self.layers[-1].out_features
+        c_func = self.to_c_code(func_name=func_name, inline=True)
+        return f"""/*
+ * Auto-generated by mlx-kans Symbolic AI engine.
+ * Pure ANSI C99 / C++ Header-Only Mathematical Model.
+ *
+ * Input dimension:  {in_dim}
+ * Output dimension: {out_dim}
+ * Dependencies:     <math.h> only (0 MB RAM / 0 VRAM)
+ */
+
+#ifndef {guard}
+#define {guard}
+
+#include <math.h>
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+#define {guard}_IN_FEATURES  {in_dim}
+#define {guard}_OUT_FEATURES {out_dim}
+
+{c_func}
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif /* {guard} */
+"""
+
+    def export_c(self, filepath: str, guard: str = "KAN_MODEL_H", func_name: str = "kan_predict") -> None:
+        """Export the SymbolicKAN model to a standalone C header file on disk."""
+        code = self.to_c_header(guard=guard, func_name=func_name)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(code)
+
 
 
 def _fit_candidate_bases(
@@ -455,6 +601,13 @@ def _eval_layer_edge(layer: nn.Module, in_idx: int, out_idx: int, x_pts: mx.arra
         deg = layer.degree
         w_c = layer.cheby_weight[out_idx, in_idx * deg : (in_idx + 1) * deg]
         basis_val = cheby @ w_c
+    elif hasattr(layer, "num_weight") and hasattr(layer, "den_weight"):
+        # RationalKAN (Padé rational functions)
+        from .rational_kan import compute_cheby_basis
+        T = compute_cheby_basis(x_pts, layer.max_degree)
+        P = T[..., : layer.p_degree + 1] @ layer.num_weight[out_idx, in_idx]
+        Q = T[..., 1 : layer.q_degree + 1] @ layer.den_weight[out_idx, in_idx]
+        basis_val = P / (1.0 + mx.abs(Q))
     else:
         basis_val = mx.zeros_like(base_val)
 
