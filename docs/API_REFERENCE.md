@@ -249,22 +249,47 @@ Quantizes all KAN layers in `model` to 8-bit integers (`uint32` packing 4 INT8 v
 ### `to_int4(model: nn.Module, group_size: int = 64, mode: str = "affine", **kwargs) -> nn.Module`
 Quantizes all KAN layers in `model` to 4-bit integers (`uint32` packing 8 INT4 values per word) with group scales and biases. Achieves up to 6.8x memory reduction for ultra-compact deployments.
 
-### `to_fp8(model: nn.Module, group_size: int = 32, allow_emulation: bool = False, **kwargs) -> nn.Module`
-Quantizes all KAN layers in `model` to 8-bit floating point (`mxfp8` / E4M3 with E8M0 scale per group of 32).
-- **Hardware Requirement**: Native hardware FP8 execution units require Apple Silicon M4 / M5 or newer (Apple GPU Family 9+).
-- **Error Behavior**: On earlier chips (M1, M2, M3), calling `to_fp8` raises `HardwareNotSupportedError` unless `allow_emulation=True` is explicitly specified.
+### `quantize(model: nn.Module, group_size: int = 64, bits: int = 8, mode: str = "affine", **kwargs) -> nn.Module`
+General quantization driver supporting custom bit-width (4 or 8), group size (32, 64, 128), and mode (`"affine"`).
 
-### `is_fp8_hardware_supported() -> bool`
-Returns `True` if the current Apple Silicon GPU possesses physical hardware tensor/ALU execution units for FP8 (M4 / M5+). Returns `False` on M1, M2, M3.
+---
 
-### `get_chip_name() -> str`
-Returns the detected marketing name of the active Apple Silicon chip (e.g. `'Apple M1'`, `'Apple M4 Pro'`).
+## Advanced Memory & Deployment Optimizations
 
-### `HardwareNotSupportedError(RuntimeError)`
-Exception raised when an operation requires hardware features not physically present in the GPU silicon of the host machine.
+### `checkpoint_kan(model: nn.Module) -> CheckpointedKAN`
+Wraps a KAN model with activation checkpointing on Apple Silicon GPU.
+- **Mechanism**: Executes each layer inside `mx.checkpoint(layer)`, discarding intermediate spline activations on the forward pass and recomputing them on-demand during backpropagation.
+- **Measured Effect**: Reduces peak training VRAM by **~57%** and avoids Unified Memory page thrashing (up to **7.4x faster** on M1).
 
-### `quantize(model: nn.Module, group_size: int = 64, bits: int = 8, mode: str = "affine", allow_emulation: bool = False, **kwargs) -> nn.Module`
-General quantization driver supporting any custom bit-width (4 or 8), group size, and mode (`"affine"` or `"mxfp8"` / `"fp8"`).
+### `CheckpointedKAN(model_or_layers: Union[nn.Module, Sequence[nn.Module]])`
+Container module executing sequential layers via `mx.checkpoint`.
+
+### `prune(model: nn.Module, threshold: float = 0.05, min_active: int = 1) -> Tuple[nn.Module, Dict[str, Any]]`
+Performs structural pruning and node compaction on trained KAN models (FastKAN, ChebyKAN).
+- **Mechanism**: Computes inter-layer coupling importance $I_j = \text{mag}_{\text{out}}(j) \times \text{mag}_{\text{in}}(j)$. Slices inactive weight rows and columns from $W_{\text{base}}$ and $W_{\text{spline}}$, returning a physically smaller KAN without sparse masks.
+- **Parameters**:
+  - `model`: Trained KAN model.
+  - `threshold` (*float*, default `0.05`): Relative cutoff fraction of peak node importance.
+  - `min_active` (*int*, default `1`): Minimum active neurons retained per hidden layer.
+- **Returns**: `(compact_model, stats_dict)`.
+
+### `compact_kan(model: nn.Module, active_indices: Sequence[Sequence[int]]) -> nn.Module`
+Directly slices KAN layer weights given explicit active neuron index sets.
+
+### `compute_node_importance(model: nn.Module) -> List[mx.array]`
+Calculates the 1D importance score vector for each hidden layer in the model.
+
+### `to_symbolic(model: nn.Module, sample_points: int = 200, grid_range: Tuple[float, float] = (-1.0, 1.0), r2_threshold: float = 0.90) -> SymbolicKAN`
+Converts a trained neural KAN into a 100% white-box closed-form mathematical expression.
+- **Mechanism**: Evaluates 1D spline curves across candidate basis functions (linear, quadratic, cubic, sine, cosine, exp, tanh, abs, gaussian) via least squares. Replaces spline weights with analytical equations where $R^2 \ge \text{r2\_threshold}$.
+- **Returns**: `SymbolicKAN` instance.
+
+### `SymbolicKAN`
+An analytical symbolic network supporting:
+- `__call__(x: mx.array) -> mx.array`: Ultra-fast evaluation with 0 MB parameter weight tensors.
+- `.formula() -> str`: Human-readable formula string (e.g. `y0 = 0.998*x0^2 + 1.001*sin(pi*x1)`).
+- `.latex() -> str`: LaTeX mathematical formatting.
+- `.r2_scores`: 3D list `[layer][out][in]` of $R^2$ fit scores.
 
 ### `get_model_size(model: nn.Module) -> dict`
 Returns memory statistics for the model:

@@ -1,18 +1,14 @@
 """
-Native INT8, INT4 & FP8 Quantization for Kolmogorov-Arnold Networks (KAN) in Apple MLX.
+Native INT8 & INT4 Quantization for Kolmogorov-Arnold Networks (KAN) in Apple MLX.
 
 Leverages Apple Silicon Metal GPU hardware acceleration via `mx.quantize` and `mx.quantized_matmul`.
 Provides:
   - INT8 / INT4: Native hardware execution on all Apple Silicon chips (M1, M2, M3, M4, M5+).
-  - FP8 (mxfp8 / E4M3): Native hardware tensor acceleration on Apple Silicon M4/M5+ (Apple GPU Family 9+).
-    On earlier chips (M1/M2/M3), raises HardwareNotSupportedError unless `allow_emulation=True`.
 """
 
 from __future__ import annotations
 
 import math
-import re
-import subprocess
 from typing import Callable, Dict, Sequence, Union, Optional
 
 import mlx.core as mx
@@ -33,70 +29,6 @@ from .metal_kernels import (
 )
 
 
-class HardwareNotSupportedError(RuntimeError):
-    """
-    Raised when an operation requires hardware features not physically supported
-    by the current Apple Silicon GPU architecture (such as hardware FP8 tensor units on M1/M2/M3).
-    """
-    pass
-
-
-def get_chip_name() -> str:
-    """Return the marketing name of the current Apple Silicon chip (e.g. 'Apple M1', 'Apple M4 Pro')."""
-    try:
-        info = mx.device_info() if hasattr(mx, "device_info") else mx.metal.device_info()
-        name = info.get("device_name", "")
-        if name and name != "Unknown":
-            return name
-    except Exception:
-        pass
-    try:
-        brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
-        if brand:
-            return brand
-    except Exception:
-        pass
-    return "Apple Silicon"
-
-
-def is_fp8_hardware_supported() -> bool:
-    """
-    Check if the current Apple Silicon GPU has native hardware support for FP8 (mxfp8 / E4M3).
-    Hardware FP8 execution units were introduced in Apple Silicon with M4 / M5 (Apple GPU Family 9+).
-    Earlier architectures (M1, M2, M3) do not have hardware FP8 execution units in the silicon.
-    """
-    try:
-        info = mx.device_info() if hasattr(mx, "device_info") else mx.metal.device_info()
-        device_name = info.get("device_name", "")
-        arch = info.get("architecture", "")
-
-        # M1, M2, M3 do not have hardware FP8 execution units
-        for gen in ["M1", "M2", "M3"]:
-            if gen in device_name:
-                return False
-
-        # Architecture string check: g13 (M1), g14 (M2), g15 (M3)
-        if any(g in arch for g in ["g13", "g14", "g15"]):
-            return False
-
-        # M4, M5, M6+ have hardware FP8 execution units
-        if any(gen in device_name for gen in ["M4", "M5", "M6", "M7", "A18"]):
-            return True
-
-        match = re.search(r"Apple M(\d+)", device_name)
-        if match:
-            return int(match.group(1)) >= 4
-
-        brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
-        match = re.search(r"Apple M(\d+)", brand)
-        if match:
-            return int(match.group(1)) >= 4
-
-        return False
-    except Exception:
-        return False
-
-
 class QuantizedWeight(nn.Module):
     """
     Quantized linear projection weight wrapper using Apple MLX native Metal GPU kernels.
@@ -104,7 +36,6 @@ class QuantizedWeight(nn.Module):
     Packs floating-point weights into 32-bit words (`uint32`) containing:
       - 4 INT8 values (for `bits=8, mode="affine"`)
       - 8 INT4 values (for `bits=4, mode="affine"`)
-      - 4 FP8 values (for `bits=8, mode="mxfp8"`)
     Executes matrix multiplication directly on Apple Silicon GPU without dequantization to FP32.
 
     Automatically handles non-standard input dimensions by zero-padding to the nearest
@@ -112,11 +43,9 @@ class QuantizedWeight(nn.Module):
 
     Args:
         weight: Unquantized floating-point weight matrix of shape (out_features, in_features).
-        group_size: Number of weight elements per quantization group (default: 64, or 32 for mxfp8).
-        bits: Bit-width per parameter (default: 8).
-        mode: Quantization mode ("affine", "mxfp8", or "fp8").
-        allow_emulation: If True, allows running FP8 on M1/M2/M3 via software emulation despite
-            lack of hardware tensor acceleration.
+        group_size: Number of weight elements per quantization group (default: 64).
+        bits: Bit-width per parameter (8 or 4, default: 8).
+        mode: Quantization mode ("affine", default: "affine").
     """
 
     def __init__(
@@ -125,22 +54,8 @@ class QuantizedWeight(nn.Module):
         group_size: int = 64,
         bits: int = 8,
         mode: str = "affine",
-        allow_emulation: bool = False,
     ):
         super().__init__()
-        if mode in ["fp8", "mxfp8"]:
-            mode = "mxfp8"
-            if not is_fp8_hardware_supported() and not allow_emulation:
-                chip = get_chip_name()
-                raise HardwareNotSupportedError(
-                    f"Hardware FP8 (mxfp8 / E4M3) quantization is not supported in hardware on {chip}. "
-                    f"Apple Silicon chips prior to M4/M5 (M1, M2, M3) do not have native hardware FP8 tensor/ALU execution units in the GPU silicon. "
-                    f"For native hardware-accelerated quantization on {chip}, use INT8 via `kans.to_int8(model)` instead. "
-                    f"(To force software-emulated FP8 anyway, pass `allow_emulation=True`)."
-                )
-            if group_size is None or group_size != 32:
-                group_size = 32
-
         out_features, in_features = weight.shape
         self.out_features = out_features
         self.in_features = in_features
@@ -816,43 +731,26 @@ def quantize(
     group_size: int = 64,
     bits: int = 8,
     mode: str = "affine",
-    allow_emulation: bool = False,
     **kwargs,
 ) -> nn.Module:
     """
-    Quantize all KAN layers (and standard MLX layers) in a model to INT8, INT4, or FP8.
+    Quantize all KAN layers (and standard MLX layers) in a model to INT8 or INT4.
 
     Args:
         model: MLX model (e.g. KAN, FastKAN, or custom nn.Module containing KAN layers).
-        group_size: Quantization group size (32, 64, or 128; must be 32 for mxfp8).
-        bits: Bit-width per parameter (8 or 4).
-        mode: Quantization mode ("affine", "mxfp8", or "fp8").
-        allow_emulation: If True, allows running FP8 on M1/M2/M3 via software emulation despite
-            lack of hardware tensor acceleration.
+        group_size: Quantization group size (32, 64, or 128, default: 64).
+        bits: Bit-width per parameter (8 or 4, default: 8).
+        mode: Quantization mode ("affine", default: "affine").
 
     Returns:
         The quantized model (updated in-place).
     """
-    if mode in ["fp8", "mxfp8"]:
-        mode = "mxfp8"
-        if not is_fp8_hardware_supported() and not allow_emulation:
-            chip = get_chip_name()
-            raise HardwareNotSupportedError(
-                f"Hardware FP8 (mxfp8 / E4M3) quantization is not supported in hardware on {chip}. "
-                f"Apple Silicon chips prior to M4/M5 (M1, M2, M3) do not have native hardware FP8 tensor/ALU execution units in the GPU silicon. "
-                f"For native hardware-accelerated quantization on {chip}, use INT8 via `kans.to_int8(model)` instead. "
-                f"(To force software-emulated FP8 anyway, pass `allow_emulation=True`)."
-            )
-        if group_size is None or group_size != 32:
-            group_size = 32
-
     def predicate(path, m):
         if hasattr(m, "to_quantized"):
             params = {
                 "group_size": group_size,
                 "bits": bits,
                 "mode": mode,
-                "allow_emulation": allow_emulation,
             }
             params.update(kwargs)
             return params
@@ -890,42 +788,10 @@ def to_int4(
     return quantize(model, group_size=group_size, bits=4, mode=mode, **kwargs)
 
 
-def to_fp8(
-    model: nn.Module,
-    group_size: int = 32,
-    allow_emulation: bool = False,
-    **kwargs,
-) -> nn.Module:
-    """
-    Quantize model weights to 8-bit floating point (FP8 / mxfp8, E4M3) on Apple Silicon GPU.
-
-    Note:
-        Native hardware FP8 tensor acceleration requires Apple Silicon M4 / M5 or newer
-        (Apple GPU Family 9+). On earlier architectures (M1, M2, M3), hardware FP8 execution
-        units are not present in the silicon, and this function will raise `HardwareNotSupportedError`
-        unless `allow_emulation=True` is explicitly passed.
-
-    Args:
-        model: MLX model (e.g. KAN, FastKAN, etc.)
-        group_size: Quantization group size (must be 32 for mxfp8, default: 32).
-        allow_emulation: If True, allows running on M1/M2/M3 via software emulation despite
-            lack of hardware tensor acceleration.
-    """
-    if not is_fp8_hardware_supported() and not allow_emulation:
-        chip = get_chip_name()
-        raise HardwareNotSupportedError(
-            f"Hardware FP8 (mxfp8 / E4M3) quantization is not supported in hardware on {chip}. "
-            f"Apple Silicon chips prior to M4/M5 (M1, M2, M3) do not have native hardware FP8 tensor/ALU execution units in the GPU silicon. "
-            f"For native hardware-accelerated quantization on {chip}, use INT8 via `kans.to_int8(model)` instead. "
-            f"(To force software-emulated FP8 anyway, pass `allow_emulation=True`)."
-        )
-    return quantize(model, group_size=group_size, bits=8, mode="mxfp8", allow_emulation=allow_emulation, **kwargs)
-
-
 def get_model_size(model: nn.Module) -> Dict[str, Union[int, float, str]]:
     """
     Calculate total parameter count and memory consumption in bytes/megabytes
-    for any MLX model (FP32, FP16, or quantized INT8/INT4/FP8).
+    for any MLX model (FP32, FP16, or quantized INT8/INT4).
 
     Returns:
         dict with keys: 'total_params', 'total_bytes', 'mb', 'summary'.

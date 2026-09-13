@@ -1,3 +1,4 @@
+import math
 import os
 import tempfile
 import unittest
@@ -36,11 +37,14 @@ from efficient_kan import (
     quantize,
     to_int8,
     to_int4,
-    to_fp8,
     get_model_size,
-    is_fp8_hardware_supported,
-    get_chip_name,
-    HardwareNotSupportedError,
+    checkpoint_kan,
+    CheckpointedKAN,
+    prune,
+    compact_kan,
+    compute_node_importance,
+    to_symbolic,
+    SymbolicKAN,
 )
 
 
@@ -351,31 +355,63 @@ class TestEfficientKANSuite(unittest.TestCase):
         self.assertGreater(compression, 3.0)
 
     # -----------------------------------------------------------------------
-    # 13. FP8 Hardware Support & Error Handling Tests
+    # 13. Advanced Optimizations: Checkpointing, Pruning & Symbolic
     # -----------------------------------------------------------------------
-    def test_fp8_hardware_detection(self):
-        # Current device is Apple M1, so hardware FP8 should return False
-        self.assertFalse(is_fp8_hardware_supported())
-        chip = get_chip_name()
-        self.assertIn("M1", chip)
+    def test_checkpoint_kan(self):
+        m = FastKAN([8, 16, 8, 4], num_grids=6)
+        m_ckpt = checkpoint_kan(m)
 
-    def test_fp8_unsupported_hardware_raises_error(self):
-        m = FastKAN([8, 16, 2], num_grids=6)
-        with self.assertRaises(HardwareNotSupportedError) as ctx:
-            to_fp8(m)
-        err_msg = str(ctx.exception)
-        self.assertIn("Hardware FP8", err_msg)
-        self.assertIn("not supported in hardware", err_msg)
-        self.assertIn("M1", err_msg)
-
-    def test_fp8_allow_emulation(self):
-        m = FastKAN([8, 16, 2], num_grids=6)
-        # With allow_emulation=True, it should quantize to mxfp8 and execute
-        to_fp8(m, allow_emulation=True)
         x = mx.random.normal((4, 8))
-        y = m(x)
+        y_target = mx.random.normal((4, 4))
+
+        # Check forward pass matches
+        y1 = m(x)
+        y2 = m_ckpt(x)
+        mx.eval(y1, y2)
+        self.assertTrue(mx.allclose(y1, y2, atol=1e-5))
+
+        # Check gradient computation through checkpointing
+        loss_fn = lambda model, a, b: mx.mean((model(a) - b) ** 2)
+        loss, grads = nn.value_and_grad(m_ckpt, loss_fn)(m_ckpt, x, y_target)
+        mx.eval(loss, grads)
+        self.assertFalse(math.isnan(loss.item()))
+
+    def test_structural_pruning(self):
+        m = FastKAN([4, 16, 2], num_grids=6)
+        # Artificially zero out neurons 4..15 to test exact pruning
+        mask = mx.zeros((16,))
+        mask = mask.at[:4].add(1.0)
+        m.layers[0].base_weight = m.layers[0].base_weight * mask[:, None]
+        m.layers[0].spline_weight = m.layers[0].spline_weight * mask[:, None]
+        m.layers[1].base_weight = m.layers[1].base_weight * mask[None, :]
+
+        compact_model, stats = prune(m, threshold=0.01, min_active=1)
+        self.assertEqual(stats["new_dims"], [4, 4, 2])
+        self.assertEqual(stats["pruned_neurons"], 12)
+        self.assertAlmostEqual(stats["percent_neurons_pruned"], 75.0)
+
+        # Check execution of compacted model
+        x = mx.random.normal((6, 4))
+        y = compact_model(x)
         mx.eval(y)
-        self.assertEqual(y.shape, (4, 2))
+        self.assertEqual(y.shape, (6, 2))
+
+    def test_symbolic_extraction(self):
+        m = FastKAN([2, 1], num_grids=6)
+        sym = to_symbolic(m, sample_points=100)
+
+        self.assertIsInstance(sym, SymbolicKAN)
+        formula = sym.formula()
+        latex = sym.latex()
+        self.assertIn("y0 =", formula)
+        self.assertIn("x0", formula)
+        self.assertIn("y_{0} =", latex)
+
+        # Evaluate symbolic model on sample inputs
+        x = mx.random.uniform(-0.8, 0.8, (8, 2))
+        y_sym = sym(x)
+        mx.eval(y_sym)
+        self.assertEqual(y_sym.shape, (8, 1))
 
 
 if __name__ == "__main__":

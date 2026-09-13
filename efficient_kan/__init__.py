@@ -33,12 +33,11 @@ from .quantized import (
     quantize,
     to_int8,
     to_int4,
-    to_fp8,
     get_model_size,
-    is_fp8_hardware_supported,
-    get_chip_name,
-    HardwareNotSupportedError,
 )
+from .checkpoint import checkpoint_kan, CheckpointedKAN
+from .pruning import prune, compact_kan, compute_node_importance
+from .symbolic import to_symbolic, SymbolicKAN, SymbolicLayer, SymbolicEdge
 
 __all__ = [
     # Core B-Spline KAN
@@ -93,9 +92,15 @@ __all__ = [
     "quantize",
     "to_int8",
     "to_int4",
-    "to_fp8",
     "get_model_size",
-    "is_fp8_hardware_supported",
-    "get_chip_name",
-    "HardwareNotSupportedError",
+    # Advanced Memory & Deployment Optimizations
+    "checkpoint_kan",
+    "CheckpointedKAN",
+    "prune",
+    "compact_kan",
+    "compute_node_importance",
+    "to_symbolic",
+    "SymbolicKAN",
+    "SymbolicLayer",
+    "SymbolicEdge",
 ]
