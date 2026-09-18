@@ -39,8 +39,14 @@ from .quantized import (
 from .checkpoint import checkpoint_kan, CheckpointedKAN
 from .pruning import prune, compact_kan, compute_node_importance
 from .symbolic import to_symbolic, SymbolicKAN, SymbolicLayer, SymbolicEdge
+from .hybrid_kan import HybridChebyKAN, HybridFastKAN, HybridReLUKAN, HybridKAN
 
 __all__ = [
+    # Hybrid Metal+MLX KAN
+    "HybridChebyKAN",
+    "HybridFastKAN",
+    "HybridReLUKAN",
+    "HybridKAN",
     # Core B-Spline KAN
     "KAN",
     "KANLinear",

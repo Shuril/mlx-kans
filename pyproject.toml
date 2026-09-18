@@ -37,8 +37,11 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["mlx_kans", "efficient_kan"]
+packages = ["mlx_kans", "efficient_kan", "metal_kans"]
 py-modules = ["kan"]
+
+[tool.setuptools.package-data]
+metal_kans = ["*.metal", "*.mm"]
 
 [project.optional-dependencies]
 dev = [

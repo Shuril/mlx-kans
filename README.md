@@ -24,6 +24,8 @@
   - `JacobiKAN` (Jacobi / Legendre / Gegenbauer orthogonal polynomials) — parametrized by $(\alpha, \beta)$.
   - `MultKAN` (KAN 2.0 with Multiplication Nodes) — exact analytical product terms $u \cdot v$ for physical conservation laws.
   - `KAN` (Cubic B-splines / Efficient-KAN) — classical Cox-de Boor reformulation with adaptive grid updates.
+- **Hybrid Metal + MLX Engine (`HybridKAN`)**:
+  - Dynamically routes execution between MLX JIT and fused Direct Metal Shading Language (MSL) shaders. Small batches ($B < 1024$) leverage low-overhead MLX graph dispatch; large batches ($B \ge 1024$) switch to fused Metal kernels with 0 intermediate basis allocations, reaching **up to 10.58M samples/sec** (3.36x speedup on Apple Silicon GPU).
 - **Hardware-Fused Metal Kernels (`mx.fast.metal_kernel`)**:
   - Handcrafted Metal Shading Language (MSL) kernels executing RBF, tent-ReLU, and Chebyshev recurrences directly in GPU thread registers without VRAM memory traffic.
 - **Unified Memory Stream Orchestration**:
@@ -112,6 +114,66 @@ B-Spline KAN       | 81,920           |      2.392 ms  |          428,156       
 <p align="center">
   <img src="assets/throughput_benchmark.png" alt="Metal GPU Throughput Benchmark" width="95%"/>
 </p>
+
+---
+
+## Hybrid Engine: MLX + Direct Metal Shading Language (MSL)
+
+For production workloads and massive batch inference, `mlx-KANs` features a **Hybrid Engine** (`HybridChebyKAN`, `HybridFastKAN`, `HybridReLUKAN`, `HybridKAN`).
+
+### Why Hybrid?
+Standard MLX graphs evaluate KAN layers in two distinct stages:
+1. **Basis Expansion**: Generates basis representations (e.g. $[B, D_{\text{in}}, \text{degree}]$) and writes them to intermediate GPU memory buffers.
+2. **Linear Projection**: Executes GEMM over materialized basis tensors.
+
+While MLX JIT compiles this graph effectively, large batch sizes ($B \ge 1024$) cause basis expansion memory allocations to dominate total latency. 
+
+**The Hybrid approach dynamically routes:**
+- **Small Batches ($B < 1024$)**: Dispatched to **MLX JIT graph**, minimizing per-call overhead and maximizing Python responsiveness.
+- **Large Batches ($B \ge 1024$)**: Dispatched directly to **Fused Metal Shading Language (MSL)** compute shaders via macOS zero-copy Unified Memory pointers (`newBufferWithBytesNoCopy`).
+
+The Direct Metal kernel computes the basis polynomial/RBF in **hardware thread registers & threadgroup SRAM** and fuses it directly into the output accumulator: **0 intermediate VRAM allocations**.
+
+### M1 GPU Microbenchmark ($64 \to 64$, degree 4):
+
+| Batch Size ($B$) | MLX JIT Forward | Direct Fused Metal | Speedup | Intermediate Allocations |
+|---|---|---|---|---|
+| **16** | **0.06 ms** (16 µs graph) | 0.08 ms | MLX faster | 0 (registers) |
+| **256** | 0.28 ms | **0.19 ms** | **1.47x** | 0 vs 131 KB |
+| **1,024** | 0.74 ms | **0.32 ms** | **2.31x** | 0 vs 524 KB |
+| **4,096** | 2.12 ms | **0.78 ms** | **2.72x** | 0 vs 2.1 MB |
+| **16,384** | 5.21 ms (3.14M samples/s) | **1.54 ms (10.58M samples/s)** | **3.36x ⚡** | **0 MB vs 8.4 MB** |
+
+### Usage Example:
+```python
+import mlx.core as mx
+import mlx.optimizers as optim
+import mlx_kans as kans
+
+# Hybrid model automatically chooses between MLX JIT and Fused Metal
+model = kans.HybridChebyKAN(
+    in_features=64, 
+    out_features=64, 
+    degree=4, 
+    adaptive_threshold=1024  # switch point
+)
+
+# Small batch uses MLX JIT
+x_small = mx.random.normal((32, 64))
+y_small = model(x_small)
+
+# Large batch zero-copy routes to Direct Fused MSL GPU kernel (10.58M samples/sec)
+x_large = mx.random.normal((4096, 64))
+y_large = model(x_large)
+
+# Full autograd compatibility
+optimizer = optim.Adam(learning_rate=1e-3)
+def loss_fn(m, x, y):
+    return mx.mean((m(x) - y) ** 2)
+
+step = kans.build_train_step(model, optimizer, loss_fn)
+loss = step(x_small, mx.random.normal((32, 64)))
+```
 
 ---
 

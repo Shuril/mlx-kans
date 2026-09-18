@@ -70,9 +70,18 @@ from efficient_kan import (
     SymbolicKAN,
     SymbolicLayer,
     SymbolicEdge,
+    # Hybrid Metal+MLX KAN
+    HybridChebyKAN,
+    HybridFastKAN,
+    HybridReLUKAN,
+    HybridKAN,
 )
 
 __all__ = [
+    "HybridChebyKAN",
+    "HybridFastKAN",
+    "HybridReLUKAN",
+    "HybridKAN",
     "KAN",
     "KANLinear",
     "compute_b_splines",

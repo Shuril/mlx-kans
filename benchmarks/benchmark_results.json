@@ -1,0 +1,202 @@
+[
+  {
+    "architecture": "Deep MLP (4x2048)",
+    "precision": "FP32",
+    "batch_size": 256,
+    "mlx": {
+      "inf_ms": 15.565987450827379,
+      "inf_p50_ms": 15.284187000361271,
+      "inf_throughput": 16446.113734107683,
+      "train_ms": 65.65972906537354,
+      "train_throughput": 3898.8890701196133,
+      "peak_mem_mb": 1278.7418479919434
+    },
+    "torch_mps": {
+      "inf_ms": 17.076377147168387,
+      "inf_p50_ms": 16.82591649296228,
+      "inf_throughput": 14991.470251197285,
+      "train_ms": 186.62141103413887,
+      "train_throughput": 1371.7611424188065,
+      "mem_mb": 529.4365234375
+    },
+    "speedup": {
+      "inference": 1.0970314090970648,
+      "training": 2.8422507020754058
+    }
+  },
+  {
+    "architecture": "Deep MLP (4x2048)",
+    "precision": "FP16",
+    "batch_size": 256,
+    "mlx": {
+      "inf_ms": 10.332035374449333,
+      "inf_p50_ms": 10.173041999223642,
+      "inf_throughput": 24777.30579911454,
+      "train_ms": 53.589598570639886,
+      "train_throughput": 4777.046419979242,
+      "peak_mem_mb": 838.3745365142822
+    },
+    "torch_mps": {
+      "inf_ms": 13.896689726243494,
+      "inf_p50_ms": 13.751083504757844,
+      "inf_throughput": 18421.653288880116,
+      "train_ms": 149.85377223153287,
+      "train_throughput": 1708.3320372106814,
+      "mem_mb": 264.71875
+    },
+    "speedup": {
+      "inference": 1.3450098864943296,
+      "training": 2.7963219771837067
+    }
+  },
+  {
+    "architecture": "ResNet-Metal (Vision)",
+    "precision": "FP32",
+    "batch_size": 128,
+    "mlx": {
+      "inf_ms": 87.69335405013408,
+      "inf_p50_ms": 84.79937449737918,
+      "inf_throughput": 1459.6317062616024,
+      "train_ms": 494.0598416336191,
+      "train_throughput": 259.0779278412213,
+      "peak_mem_mb": 2999.189441680908
+    },
+    "torch_mps": {
+      "inf_ms": 60.32065422623418,
+      "inf_p50_ms": 58.84795849851798,
+      "inf_throughput": 2121.9929001421747,
+      "train_ms": 268.355902901385,
+      "train_throughput": 476.9785147861541,
+      "mem_mb": 5.452392578125
+    },
+    "speedup": {
+      "inference": 0.687858901961362,
+      "training": 0.543164775372272
+    }
+  },
+  {
+    "architecture": "ResNet-Metal (Vision)",
+    "precision": "FP16",
+    "batch_size": 128,
+    "mlx": {
+      "inf_ms": 59.870197874261066,
+      "inf_p50_ms": 59.99535399314482,
+      "inf_throughput": 2137.958526023659,
+      "train_ms": 282.4046611029189,
+      "train_throughput": 453.25030932599225,
+      "peak_mem_mb": 1506.3375053405762
+    },
+    "torch_mps": {
+      "inf_ms": 50.23426752741216,
+      "inf_p50_ms": 45.066792008583434,
+      "inf_throughput": 2548.061438940105,
+      "train_ms": 183.9571137660338,
+      "train_throughput": 695.8143524843351,
+      "mem_mb": 2.489990234375
+    },
+    "speedup": {
+      "inference": 0.839052973115502,
+      "training": 0.6513954587279029
+    }
+  },
+  {
+    "architecture": "MiniTransformer (NLP)",
+    "precision": "FP32",
+    "batch_size": 64,
+    "mlx": {
+      "inf_ms": 27.83452297662734,
+      "inf_p50_ms": 26.906708502792753,
+      "inf_throughput": 2299.3029215460533,
+      "train_ms": 94.65199996678469,
+      "train_throughput": 676.1610956182533,
+      "peak_mem_mb": 911.5231475830078
+    },
+    "torch_mps": {
+      "inf_ms": 48.949370827904204,
+      "inf_p50_ms": 43.95147899049334,
+      "inf_throughput": 1307.4733937849921,
+      "train_ms": 155.4940138342014,
+      "train_throughput": 411.5914074238335,
+      "mem_mb": 50.488525390625
+    },
+    "speedup": {
+      "inference": 1.7585848648818951,
+      "training": 1.6427969180658353
+    }
+  },
+  {
+    "architecture": "MiniTransformer (NLP)",
+    "precision": "FP16",
+    "batch_size": 64,
+    "mlx": {
+      "inf_ms": 19.13285832197289,
+      "inf_p50_ms": 18.961124995257705,
+      "inf_throughput": 3345.0307801892836,
+      "train_ms": 72.03158603030413,
+      "train_throughput": 888.4991088919631,
+      "peak_mem_mb": 478.8677463531494
+    },
+    "torch_mps": {
+      "inf_ms": 37.50660105069983,
+      "inf_p50_ms": 37.17889549443498,
+      "inf_throughput": 1706.3662983880497,
+      "train_ms": 126.4896402019076,
+      "train_throughput": 505.970290514233,
+      "mem_mb": 25.2607421875
+    },
+    "speedup": {
+      "inference": 1.9603239839823539,
+      "training": 1.7560301969290617
+    }
+  },
+  {
+    "architecture": "FastKAN (RBF Spline)",
+    "precision": "FP32",
+    "batch_size": 128,
+    "mlx": {
+      "inf_ms": 1.4384479509317316,
+      "inf_p50_ms": 1.308833496295847,
+      "inf_throughput": 88984.79775864678,
+      "train_ms": 3.9665250350177907,
+      "train_throughput": 32270.059780279662,
+      "peak_mem_mb": 44.91377258300781
+    },
+    "torch_mps": {
+      "inf_ms": 2.332861503964523,
+      "inf_p50_ms": 2.260208493680693,
+      "inf_throughput": 54868.237905453716,
+      "train_ms": 6.4125555974897,
+      "train_throughput": 19960.840581266493,
+      "mem_mb": 15.413818359375
+    },
+    "speedup": {
+      "inference": 1.621790696321997,
+      "training": 1.6166683787137466
+    }
+  },
+  {
+    "architecture": "FastKAN (RBF Spline)",
+    "precision": "FP16",
+    "batch_size": 128,
+    "mlx": {
+      "inf_ms": 1.1644062251434661,
+      "inf_p50_ms": 1.1385209945729002,
+      "inf_throughput": 109927.2721461354,
+      "train_ms": 2.747631832608022,
+      "train_throughput": 46585.571793475625,
+      "peak_mem_mb": 29.10294532775879
+    },
+    "torch_mps": {
+      "inf_ms": 2.2054706772905774,
+      "inf_p50_ms": 2.1522500028368086,
+      "inf_throughput": 58037.497989884,
+      "train_ms": 5.608181833910446,
+      "train_throughput": 22823.79633735035,
+      "mem_mb": 7.207275390625
+    },
+    "speedup": {
+      "inference": 1.894073244944085,
+      "training": 2.0410965426132877
+    }
+  }
+]

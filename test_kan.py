@@ -47,6 +47,10 @@ from efficient_kan import (
     compute_node_importance,
     to_symbolic,
     SymbolicKAN,
+    HybridChebyKAN,
+    HybridFastKAN,
+    HybridReLUKAN,
+    HybridKAN,
 )
 
 
@@ -495,6 +499,67 @@ class TestEfficientKANSuite(unittest.TestCase):
                 # Compare with Python SymbolicKAN output on same input
                 py_out = sym(mx.array([[0.5, -0.25]])).item()
                 self.assertAlmostEqual(c_out, py_out, places=4)
+
+    # -----------------------------------------------------------------------
+    # 9. Hybrid KAN (Metal + MLX) Tests
+    # -----------------------------------------------------------------------
+    def test_hybrid_chebykan(self):
+        # 1. Forward with small batch (MLX path)
+        layer = HybridChebyKAN(in_features=8, out_features=16, degree=4, adaptive_threshold=100)
+        x_small = mx.random.normal((16, 8))
+        y_small = layer(x_small)
+        self.assertEqual(y_small.shape, (16, 16))
+
+        # 2. Forward with threshold passed (Direct Metal path if available)
+        x_large = mx.random.normal((128, 8))
+        y_large = layer(x_large)
+        self.assertEqual(y_large.shape, (128, 16))
+
+        # 3. Verify MLX vs Direct Metal parity
+        y_mlx = layer._mlx_forward(x_large)
+        diff = mx.max(mx.abs(y_large - y_mlx)).item()
+        self.assertLess(diff, 1e-4)
+
+    def test_hybrid_fastkan(self):
+        layer = HybridFastKAN(in_features=8, out_features=16, num_centers=6, adaptive_threshold=50)
+        x = mx.random.normal((64, 8))
+        y = layer(x)
+        self.assertEqual(y.shape, (64, 16))
+        y_mlx = layer._mlx_forward(x)
+        diff = mx.max(mx.abs(y - y_mlx)).item()
+        self.assertLess(diff, 1e-4)
+
+    def test_hybrid_relukan(self):
+        layer = HybridReLUKAN(in_features=8, out_features=16, num_grids=6, adaptive_threshold=50)
+        x = mx.random.normal((64, 8))
+        y = layer(x)
+        self.assertEqual(y.shape, (64, 16))
+        y_mlx = layer._mlx_forward(x)
+        diff = mx.max(mx.abs(y - y_mlx)).item()
+        self.assertLess(diff, 1e-4)
+
+    def test_hybrid_kan_network(self):
+        net = HybridKAN([4, 16, 8, 2], basis_type="cheby", degree=4)
+        x = mx.random.normal((32, 4))
+        out = net(x)
+        self.assertEqual(out.shape, (32, 2))
+
+    def test_hybrid_kan_training_step(self):
+        net = HybridKAN([4, 8, 2], basis_type="cheby", degree=3)
+        optimizer = optim.Adam(learning_rate=1e-2)
+
+        def loss_fn(model, x, y_target):
+            pred = model(x)
+            return mx.mean((pred - y_target) ** 2)
+
+        x = mx.random.normal((32, 4))
+        y = mx.random.normal((32, 2))
+
+        loss_and_grad_fn = nn.value_and_grad(net, loss_fn)
+        loss_val, grads = loss_and_grad_fn(net, x, y)
+        optimizer.update(net, grads)
+        mx.eval(net.parameters())
+        self.assertTrue(loss_val.item() >= 0.0)
 
 
 if __name__ == "__main__":
